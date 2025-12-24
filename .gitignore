@@ -1,2 +1,73 @@
-/.env
-/.venv
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+media/
+*.log
+logs/
+.DS_Store
+src/__pycache__/config.cpython-311.pyc
+src/__pycache__/config.cpython-311.pyc
+src/__pycache__/config.cpython-314.pyc
+src/__pycache__/main.cpython-311.pyc
+src/__pycache__/worker.cpython-311.pyc
+src/services/__pycache__/context.cpython-311.pyc
+src/services/__pycache__/green_api.cpython-311.pyc
+src/services/__pycache__/image_gen.cpython-314.pyc
+src/services/__pycache__/llm.cpython-311.pyc
+src/services/__pycache__/stt.cpython-311.pyc

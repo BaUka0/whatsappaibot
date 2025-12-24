@@ -24,5 +24,5 @@ RUN mkdir -p media
 # Expose port (for web container)
 EXPOSE 8000
 
-# Default command (will be overridden in docker-compose)
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default command (uses PORT env var if set, else 8000)
+CMD sh -c "uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000}"
