@@ -1,7 +1,10 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from src.worker import process_message
 from src.config import settings
-from redis import asyncio as redis
+from src.services.green_api import green_api
+from src.services.llm import llm_service
+from src.services.context import context_service
+from src.services.supabase_db import supabase_db
 import logging
 import time
 
@@ -10,11 +13,6 @@ logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.APP_NAME)
-redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-
-# Rate limiting settings
-RATE_LIMIT_WINDOW = 60  # seconds
-RATE_LIMIT_MAX_REQUESTS = 30  # max requests per window per chat
 
 @app.get("/")
 async def root():
@@ -23,39 +21,35 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint for monitoring."""
-    try:
-        # Check Redis connectivity
-        await redis_client.ping()
-        redis_status = "healthy"
-    except Exception as e:
-        redis_status = f"unhealthy: {str(e)}"
-    
+    components = {}
+    overall_status = "healthy"
+
+    # Check Supabase
+    supabase_status = await supabase_db.health_check()
+    components["supabase"] = supabase_status
+    if not supabase_status["healthy"]:
+        overall_status = "degraded"
+
+    # Check Green API
+    green_api_status = await green_api.health_check()
+    components["green_api"] = green_api_status
+    if not green_api_status["healthy"]:
+        overall_status = "degraded"
+
+    # Check Groq API
+    groq_status = await llm_service.health_check()
+    components["groq"] = groq_status
+    if not groq_status["healthy"]:
+        overall_status = "degraded"
+
     return {
-        "status": "healthy" if redis_status == "healthy" else "degraded",
-        "components": {
-            "redis": redis_status,
-            "api": "healthy"
-        },
+        "status": overall_status,
+        "components": components,
         "timestamp": time.time()
     }
 
-async def check_rate_limit(chat_id: str) -> bool:
-    """Check if chat has exceeded rate limit. Returns True if allowed."""
-    key = f"ratelimit:{chat_id}"
-    current = await redis_client.get(key)
-    
-    if current is None:
-        await redis_client.set(key, "1", ex=RATE_LIMIT_WINDOW)
-        return True
-    
-    if int(current) >= RATE_LIMIT_MAX_REQUESTS:
-        return False
-    
-    await redis_client.incr(key)
-    return True
-
 @app.post("/webhook")
-async def webhook(request: Request):
+async def webhook(request: Request, background_tasks: BackgroundTasks):
     try:
         body = await request.json()
     except Exception:
@@ -79,19 +73,16 @@ async def webhook(request: Request):
     chat_id = sender_data.get("chatId", "unknown")
 
     # Rate limiting
-    if not await check_rate_limit(chat_id):
+    if not context_service.check_rate_limit(chat_id):
         logger.warning(f"Rate limit exceeded for chat {chat_id}")
         return {"status": "rate_limited"}
 
     # Deduplication
-    if await redis_client.get(f"dedup:{id_message}"):
+    if context_service.check_dedup(id_message):
         logger.info(f"Duplicate message {id_message} ignored")
         return {"status": "duplicate"}
     
-    # Set dedup key for 10 minutes
-    await redis_client.set(f"dedup:{id_message}", "1", ex=600)
-
-    # Push to Celery
-    process_message.delay(body)
+    # Push to background processing
+    background_tasks.add_task(process_message, body)
 
     return {"status": "received"}

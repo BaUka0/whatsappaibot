@@ -1,8 +1,7 @@
 """
-Celery worker for processing WhatsApp messages.
-Refactored for better organization with handlers in separate module.
+Asynchronous message processor for WhatsApp.
+Removed Celery for single-container architecture using BackgroundTasks.
 """
-from celery import Celery
 import asyncio
 import logging
 import re
@@ -21,24 +20,15 @@ from src.handlers import (
     handle_button_response,
 )
 
-# Celery setup
-celery_app = Celery(
-    "whatsapp_bot",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND
-)
-
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-
-@celery_app.task
-def process_message(event_data: dict):
-    """Process incoming webhook event."""
+async def process_message(event_data: dict):
+    """Entry point for background processing."""
     try:
-        asyncio.run(_process_message_async(event_data))
+        await _process_message_async(event_data)
     except Exception as e:
-        logger.error(f"Task Failed: {e}")
+        logger.error(f"Processing Failed: {e}")
 
 
 async def _process_message_async(event_data: dict):
@@ -138,18 +128,35 @@ async def _process_message_async(event_data: dict):
     chat_model = await context_service.get_model(chat_id)
     
     # Get LLM response
-    response_text = await llm_service.get_response(llm_messages, model=chat_model)
-    
+    try:
+        response_text = await llm_service.get_response(llm_messages, model=chat_model)
+    except Exception as e:
+        logger.error(f"LLM service error for chat {chat_id}: {e}")
+        await green_api.send_message(chat_id, "❌ Ошибка при получении ответа от AI. Попробуйте позже.")
+        return
+
+    # Check if response is valid
+    if not response_text or "Ошибка" in response_text:
+        logger.warning(f"Invalid LLM response for chat {chat_id}: {response_text}")
+
     # Update history
-    await context_service.add_message(chat_id, "user", text_content)
-    await context_service.add_message(chat_id, "assistant", response_text)
-    
+    try:
+        await context_service.add_message(chat_id, "user", text_content)
+        await context_service.add_message(chat_id, "assistant", response_text)
+    except Exception as e:
+        logger.error(f"Failed to save history for chat {chat_id}: {e}")
+
     # Send response
-    await green_api.send_message(chat_id, response_text)
-    
+    send_result = await green_api.send_message(chat_id, response_text)
+    if not send_result:
+        logger.error(f"Failed to send message to chat {chat_id}")
+
     # Cleanup media
     if has_media and file_path and os.path.exists(file_path):
-        os.remove(file_path)
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            logger.warning(f"Failed to cleanup media file {file_path}: {e}")
 
 
 async def _should_reply_in_group(chat_id: str, text: str) -> bool:

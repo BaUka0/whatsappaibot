@@ -1,48 +1,14 @@
-version: '3.8'
-
 services:
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    restart: always
-
   app:
     build: .
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
     volumes:
       - .:/app
     ports:
       - "8000:8000"
     env_file:
       - .env
-    depends_on:
-      - redis
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-
-  # Local STT service (disabled - using Groq Whisper instead)
-  # stt:
-  #   build: ./stt_service
-  #   ports:
-  #     - "8001:8001"
-  #   restart: unless-stopped
-
-  worker:
-    build: .
-    command: celery -A src.worker.celery_app worker --loglevel=info
-    volumes:
-      - .:/app
-    env_file:
-      - .env
-    depends_on:
-      - redis
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    restart: always
 
 volumes:
   media_data:

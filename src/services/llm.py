@@ -1,12 +1,36 @@
 import base64
 import os
 import httpx
+import logging
+import asyncio
 from openai import AsyncOpenAI
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # Cache for available models (refreshed on startup or when needed)
 _cached_models: dict[str, str] = {}
+
+
+async def encode_image_to_base64(file_path: str) -> str | None:
+    """
+    Asynchronously encode an image file to base64.
+    Uses run_in_executor to avoid blocking the event loop.
+    """
+    if not file_path or not os.path.exists(file_path):
+        return None
+
+    def _read_and_encode():
+        with open(file_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+
+    loop = asyncio.get_event_loop()
+    try:
+        return await loop.run_in_executor(None, _read_and_encode)
+    except Exception as e:
+        logger.error(f"Failed to encode image {file_path}: {e}")
+        return None
 
 
 async def fetch_available_models() -> dict[str, str]:
@@ -40,11 +64,11 @@ async def fetch_available_models() -> dict[str, str]:
                     models[model_id] = desc
             
             _cached_models = models
-            print(f"Loaded {len(models)} models from Groq API")
+            logger.info(f"Loaded {len(models)} models from Groq API")
             return models
-            
+
     except Exception as e:
-        print(f"Failed to fetch models: {e}")
+        logger.error(f"Failed to fetch models: {e}")
         # Return fallback models
         return {
             "llama-3.3-70b-versatile": "Llama 3.3 70B (умный)",
@@ -69,11 +93,36 @@ class LLMService:
         self.default_model = settings.OPENROUTER_MODEL
         self.base_url = settings.OPENROUTER_BASE_URL
         self.system_prompt = settings.SYSTEM_PROMPT
-        
+
         self.client = AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
         )
+
+    async def health_check(self) -> dict:
+        """
+        Health check for Groq API.
+        Returns status dict with 'healthy' bool and 'details' info.
+        """
+        try:
+            # Try to fetch models as a health check
+            models = await self.get_available_models()
+            if models:
+                return {
+                    "healthy": True,
+                    "details": f"Groq API connected, {len(models)} models available"
+                }
+            else:
+                return {
+                    "healthy": False,
+                    "details": "No models available from API"
+                }
+        except Exception as e:
+            logger.error(f"Groq API health check failed: {e}")
+            return {
+                "healthy": False,
+                "details": f"Error: {str(e)}"
+            }
 
     async def get_available_models(self) -> dict[str, str]:
         """Get available models (fetches from API if not cached)."""
@@ -82,13 +131,18 @@ class LLMService:
     async def get_response(self, messages: list[dict], model: str | None = None) -> str:
         """
         Get response from LLM.
-        
+
         Args:
             messages: Chat messages
             model: Optional model override (uses default if not specified)
         """
         use_model = model or self.default_model
-        
+
+        # Validate API key
+        if not self.api_key:
+            logger.error("OpenRouter API key not configured")
+            return "Ошибка конфигурации: API ключ не настроен"
+
         try:
             formatted_messages = []
             system_instruction = self.system_prompt
@@ -120,25 +174,31 @@ class LLMService:
                         openai_content.append({"type": "text", "text": text_part})
                     
                     if "files" in content:
+                        # Gather all file encoding tasks
+                        encode_tasks = []
                         for file_item in content["files"]:
                             file_path = file_item
                             if isinstance(file_item, dict):
                                 file_path = file_item.get("path")
-                            
+
                             if not file_path or not os.path.exists(file_path):
                                 continue
-                                
+
                             ext = os.path.splitext(file_path)[1].lower()
                             if ext in [".jpg", ".jpeg", ".png", ".webp"]:
-                                with open(file_path, "rb") as image_file:
-                                    base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-                                    mime_type = "image/jpeg" if ext in [".jpg", ".jpeg"] else f"image/{ext[1:]}"
-                                    openai_content.append({
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": f"data:{mime_type};base64,{base64_image}"
-                                        }
-                                    })
+                                encode_tasks.append((file_path, ext))
+
+                        # Process all encodings concurrently
+                        for file_path, ext in encode_tasks:
+                            base64_image = await encode_image_to_base64(file_path)
+                            if base64_image:
+                                mime_type = "image/jpeg" if ext in [".jpg", ".jpeg"] else f"image/{ext[1:]}"
+                                openai_content.append({
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{mime_type};base64,{base64_image}"
+                                    }
+                                })
 
                     formatted_messages.append({"role": role, "content": openai_content})
 
@@ -152,9 +212,9 @@ class LLMService:
             )
             
             return response.choices[0].message.content
-            
+
         except Exception as e:
-            print(f"LLM Error ({use_model}): {e}")
+            logger.error(f"LLM Error ({use_model}): {e}")
             return f"Ошибка модели {use_model}. Попробуйте /model для списка."
 
 

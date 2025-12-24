@@ -12,8 +12,11 @@ import httpx
 import os
 import random
 import time
+import logging
 from urllib.parse import quote
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # Prompt for enhancing user's image description
@@ -66,11 +69,11 @@ async def enhance_prompt(user_prompt: str, model: str | None = None) -> str:
         enhanced = response.choices[0].message.content.strip()
         # Remove quotes if present
         enhanced = enhanced.strip('"\'')
-        print(f"[ImageGen] Enhanced prompt: {enhanced[:80]}...")
+        logger.debug(f"[ImageGen] Enhanced prompt: {enhanced[:80]}...")
         return enhanced
         
     except Exception as e:
-        print(f"[ImageGen] Enhancement failed: {e}, using original")
+        logger.warning(f"[ImageGen] Enhancement failed: {e}, using original")
         return user_prompt
 
 
@@ -128,7 +131,7 @@ async def verify_image_url(url: str, timeout: int = 90) -> tuple[bool, bytes | N
     """
     async with httpx.AsyncClient() as client:
         try:
-            print(f"[ImageGen] Requesting image from Pollinations...")
+            logger.info(f"[ImageGen] Requesting image from Pollinations...")
             response = await client.get(
                 url, 
                 timeout=timeout, 
@@ -136,27 +139,27 @@ async def verify_image_url(url: str, timeout: int = 90) -> tuple[bool, bytes | N
             )
             
             if response.status_code != 200:
-                print(f"[ImageGen] HTTP error: {response.status_code}")
+                logger.error(f"[ImageGen] HTTP error: {response.status_code}")
                 return False, None
             
             content_type = response.headers.get("content-type", "")
             if "image" not in content_type:
-                print(f"[ImageGen] Not an image: {content_type}")
+                logger.error(f"[ImageGen] Not an image: {content_type}")
                 return False, None
             
             content = response.content
             if len(content) < 1000:
-                print(f"[ImageGen] Image too small: {len(content)} bytes")
+                logger.warning(f"[ImageGen] Image too small: {len(content)} bytes")
                 return False, None
             
-            print(f"[ImageGen] Valid image received: {len(content)} bytes")
+            logger.info(f"[ImageGen] Valid image received: {len(content)} bytes")
             return True, content
             
         except httpx.TimeoutException:
-            print(f"[ImageGen] Timeout after {timeout}s")
+            logger.warning(f"[ImageGen] Timeout after {timeout}s")
             return False, None
         except Exception as e:
-            print(f"[ImageGen] Request error: {e}")
+            logger.error(f"[ImageGen] Request error: {e}")
             return False, None
 
 
@@ -199,14 +202,14 @@ async def generate_image(
         model=model
     )
     
-    print(f"[ImageGen] URL: {image_url[:100]}...")
-    print(f"[ImageGen] Model: {model}, Seed: {seed}")
+    logger.info(f"[ImageGen] URL: {image_url[:100]}...")
+    logger.info(f"[ImageGen] Model: {model}, Seed: {seed}")
     
     # Step 3: Verify and download image
     is_valid, image_bytes = await verify_image_url(image_url)
     
     if not is_valid or image_bytes is None:
-        print("[ImageGen] Failed to generate image")
+        logger.error("[ImageGen] Failed to generate image")
         return None, final_prompt, None
     
     # Step 4: Save to file
@@ -217,10 +220,10 @@ async def generate_image(
     try:
         with open(file_path, "wb") as f:
             f.write(image_bytes)
-        print(f"[ImageGen] Saved: {file_path} ({len(image_bytes)} bytes)")
+        logger.info(f"[ImageGen] Saved: {file_path} ({len(image_bytes)} bytes)")
         return file_path, final_prompt, seed
     except Exception as e:
-        print(f"[ImageGen] Failed to save file: {e}")
+        logger.error(f"[ImageGen] Failed to save file: {e}")
         return None, final_prompt, None
 
 

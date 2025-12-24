@@ -10,8 +10,12 @@ class Settings(BaseSettings):
     GREEN_API_INSTANCE_ID: str
     GREEN_API_TOKEN: str
     GREEN_API_HOST: str = "https://api.green-api.com"
-    # Media host for file uploads (format: https://XXXX.api.greenapi.com where XXXX is first 4 digits of instance)
+    # Media host for file uploads
     GREEN_API_MEDIA_HOST: str | None = None
+
+    # Supabase Settings
+    SUPABASE_URL: str
+    SUPABASE_KEY: str
 
     # LLM Settings
     OPENROUTER_API_KEY: str
@@ -33,11 +37,6 @@ You can understand voice messages (transcribed) and see images. Be concise but h
     # Bot Settings
     BOT_NICKNAME: str = "ботяра"  # Trigger word for the bot in group chats
     ADMIN_CHAT_ID: str | None = None  # Admin's chat ID for admin commands
-
-    # Redis & Celery
-    REDIS_URL: str = "redis://localhost:6379/0"
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
 
     # Paths
     MEDIA_DIR: str = os.path.join(os.getcwd(), "media")

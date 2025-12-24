@@ -1,8 +1,11 @@
 import httpx
 import os
+import logging
 from src.config import settings
 from dataclasses import dataclass
 from typing import Literal
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -35,7 +38,7 @@ class GreenAPIService:
     def __init__(self):
         self.base_url = f"{settings.GREEN_API_HOST}/waInstance{settings.GREEN_API_INSTANCE_ID}"
         self.api_token_url = settings.GREEN_API_TOKEN
-        
+
         # Media URL for file uploads (uses first 4 digits of instance ID)
         if settings.GREEN_API_MEDIA_HOST:
             self.media_url = f"{settings.GREEN_API_MEDIA_HOST}/waInstance{settings.GREEN_API_INSTANCE_ID}"
@@ -43,6 +46,49 @@ class GreenAPIService:
             # Auto-detect: use first 4 digits of instance ID
             instance_prefix = str(settings.GREEN_API_INSTANCE_ID)[:4]
             self.media_url = f"https://{instance_prefix}.api.greenapi.com/waInstance{settings.GREEN_API_INSTANCE_ID}"
+
+    async def health_check(self) -> dict:
+        """
+        Health check for Green API.
+        Returns status dict with 'healthy' bool and 'details' info.
+        """
+        if not settings.GREEN_API_INSTANCE_ID or not settings.GREEN_API_TOKEN:
+            return {
+                "healthy": False,
+                "details": "Green API credentials not configured"
+            }
+
+        try:
+            # Simple check - try to get instance info (placeholder endpoint)
+            # Green API doesn't have a simple health endpoint, so we check config
+            async with httpx.AsyncClient() as client:
+                # Use a minimal request to check connectivity
+                response = await client.get(
+                    f"{self.base_url}/getSettings/{self.api_token_url}",
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    return {
+                        "healthy": True,
+                        "details": "Green API connected"
+                    }
+                else:
+                    return {
+                        "healthy": False,
+                        "details": f"HTTP {response.status_code}"
+                    }
+        except httpx.HTTPError as e:
+            logger.error(f"Green API health check failed: {e}")
+            return {
+                "healthy": False,
+                "details": f"Connection error: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Green API health check error: {e}")
+            return {
+                "healthy": False,
+                "details": f"Error: {str(e)}"
+            }
 
     async def send_message(self, chat_id: str, message: str):
         """Send a text message to a specific chat."""
@@ -57,7 +103,7 @@ class GreenAPIService:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                print(f"Error sending message: {e}")
+                logger.error(f"Error sending message: {e}")
                 return None
 
     async def send_file_by_url(self, chat_id: str, file_url: str, caption: str = "", file_name: str = "image.png"):
@@ -79,7 +125,7 @@ class GreenAPIService:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                print(f"Error sending file by URL: {e}")
+                logger.error(f"Error sending file by URL: {e}")
                 return None
 
     async def send_file_by_upload(self, chat_id: str, file_path: str, caption: str = "", file_name: str | None = None):
@@ -124,15 +170,15 @@ class GreenAPIService:
                 response = await client.post(url, data=data, files=files, timeout=60)
                 
                 if response.status_code != 200:
-                    print(f"Upload failed: {response.status_code} - {response.text}")
+                    logger.error(f"Upload failed: {response.status_code} - {response.text}")
                     return None
-                    
+
                 return response.json()
             except httpx.HTTPError as e:
-                print(f"Error uploading file: {e}")
+                logger.error(f"Error uploading file: {e}")
                 return None
             except FileNotFoundError:
-                print(f"File not found: {file_path}")
+                logger.error(f"File not found: {file_path}")
                 return None
 
     async def send_interactive_buttons(
@@ -183,10 +229,10 @@ class GreenAPIService:
                 response = await client.post(url, json=payload, timeout=10)
                 response.raise_for_status()
                 result = response.json()
-                print(f"Interactive buttons response: {result}")
+                logger.info(f"Interactive buttons response: {result}")
                 return result
             except httpx.HTTPError as e:
-                print(f"Error sending interactive buttons: {e}")
+                logger.error(f"Error sending interactive buttons: {e}")
                 # Fallback to regular message
                 fallback_msg = f"{header or ''}\n\n{body}\n\n{footer or ''}"
                 return await self.send_message(chat_id, fallback_msg.strip())
@@ -201,7 +247,7 @@ class GreenAPIService:
                     f.write(response.content)
                 return file_path
             except httpx.HTTPError as e:
-                print(f"Error downloading file: {e}")
+                logger.error(f"Error downloading file: {e}")
                 return None
 
     async def get_chat_history(self, chat_id: str, count: int = 100) -> list[dict]:
@@ -220,7 +266,7 @@ class GreenAPIService:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                print(f"Error getting chat history: {e}")
+                logger.error(f"Error getting chat history: {e}")
                 return []
 
     async def get_message(self, chat_id: str, id_message: str) -> dict | None:
@@ -239,7 +285,7 @@ class GreenAPIService:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                print(f"Error getting message: {e}")
+                logger.error(f"Error getting message: {e}")
                 return None
 
 

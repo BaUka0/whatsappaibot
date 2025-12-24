@@ -4,53 +4,40 @@ A production-ready WhatsApp bot written in Python (FastAPI + Celery + Redis).
 
 ## ✨ Features
 
-- **🗣️ Text Chat** - Intelligent responses via Groq (Llama 3.1, Gemma 2)
+- **🗣️ Text Chat** - Intelligent responses via Groq (Llama 3.3)
 - **🎙️ Voice Messages** - Automatic transcription via Groq Whisper
 - **🖼️ Image Understanding** - Vision support for image analysis  
-- **💬 Quoted Messages** - Reply to voice messages to get transcription
-- **📋 Chat Summary** - `/summary` command for group chat summarization
-- **🧠 Context Awareness** - Remembers conversation history (Redis)
-- **⚡ Rate Limiting** - Protection from spam
-- **🔄 Transcription Caching** - Saves API calls
+- ** Chat Summary** - `/summary` command for group chats
+- **🗄️ Supabase Backend** - Chat history and settings in PostgreSQL
+- **⚡ Background Processing** - FastAPI BackgroundTasks (no Redis/Celery needed!)
 
-## 🏗️ Architecture
+## 🏗️ Architecture (Simplified)
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Green API  │────▶│   FastAPI   │────▶│   Celery    │
-│  (WhatsApp) │     │   Webhook   │     │   Worker    │
+│  Green API  │────▶│   FastAPI   │────▶│   Supabase  │
+│  (WhatsApp) │     │   Standalone│     │  (DB/Auth)  │
 └─────────────┘     └─────────────┘     └─────────────┘
-                           │                   │
-                           ▼                   ▼
-                    ┌─────────────┐     ┌─────────────┐
-                    │    Redis    │     │  Groq API   │
-                    │   (Queue)   │     │  (LLM/STT)  │
-                    └─────────────┘     └─────────────┘
 ```
 
-## 📋 Prerequisites
+## � Quick Start
 
-1. **Green-API Instance**: [green-api.com](https://green-api.com)
-2. **Groq API Key**: [console.groq.com](https://console.groq.com)
-3. **Docker & Docker Compose**
+1. **Configure Environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env: Add Green API, Groq, and Supabase credentials
+   ```
 
-## 🚀 Quick Start
+2. **Run with Docker (Recommended)**
+   ```bash
+   docker-compose up -d --build
+   ```
 
-```bash
-# 1. Clone
-git clone <repo_url>
-cd whatsapp-ai-bot
-
-# 2. Configure
-cp .env.example .env
-# Edit .env with your credentials
-
-# 3. Run
-docker-compose up -d --build
-
-# 4. Set webhook in Green-API console
-# URL: https://your-server.com/webhook
-```
+3. **Run Locally (Development)**
+   ```bash
+   pip install -r requirements.txt
+   uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
 
 ## ⚙️ Configuration
 

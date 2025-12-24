@@ -5,9 +5,12 @@ Includes Redis caching to avoid repeated transcriptions.
 from abc import ABC, abstractmethod
 import os
 import hashlib
+import logging
 from openai import AsyncOpenAI
 from src.config import settings
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 
 class STTProvider(ABC):
@@ -48,10 +51,10 @@ class CachedSTT(STTProvider):
         try:
             cached = await redis.get(cache_key)
             if cached:
-                print(f"STT cache hit for {file_hash[:8]}...")
+                logger.debug(f"STT cache hit for {file_hash[:8]}...")
                 return cached
         except Exception as e:
-            print(f"Redis cache error: {e}")
+            logger.warning(f"Redis cache error: {e}")
         
         result = await self.provider.transcribe(file_path)
         
@@ -59,7 +62,7 @@ class CachedSTT(STTProvider):
             try:
                 await redis.set(cache_key, result, ex=86400)  # 24 hours
             except Exception as e:
-                print(f"Redis cache set error: {e}")
+                logger.warning(f"Redis cache set error: {e}")
         
         return result
 
@@ -79,7 +82,7 @@ def _convert_to_mp3(input_path: str) -> str:
         )
         return output_path
     except subprocess.CalledProcessError as e:
-        print(f"FFmpeg conversion failed: {e}")
+        logger.warning(f"FFmpeg conversion failed: {e}")
         return input_path
 
 
@@ -106,7 +109,7 @@ class GroqSTT(STTProvider):
                 )
             return transcription.text
         except Exception as e:
-            print(f"Groq STT Error: {e}")
+            logger.error(f"Groq STT Error: {e}")
             return ""
         finally:
             if converted_path != file_path and os.path.exists(converted_path):

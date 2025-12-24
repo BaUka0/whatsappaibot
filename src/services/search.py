@@ -10,8 +10,11 @@ Flow:
 import httpx
 import re
 import asyncio
+import logging
 from urllib.parse import quote, urlparse, unquote, parse_qs
 from src.services.llm import llm_service
+
+logger = logging.getLogger(__name__)
 
 
 # System prompt for AI summarization
@@ -75,7 +78,7 @@ def _extract_real_url(ddg_url: str) -> str | None:
             return "https:" + ddg_url
             
     except Exception as e:
-        print(f"[Search] URL extract error: {e}")
+        logger.warning(f"[Search] URL extract error: {e}")
     
     return None
 
@@ -124,11 +127,11 @@ async def search_duckduckgo(query: str, num_results: int = 5) -> list[dict]:
                 "snippet": snippet[:300]
             })
         
-        print(f"[Search] Found {len(results)} results for: {query}")
+        logger.info(f"[Search] Found {len(results)} results for: {query}")
         return results
         
     except Exception as e:
-        print(f"[Search] DuckDuckGo error: {e}")
+        logger.error(f"[Search] DuckDuckGo error: {e}")
         return []
 
 
@@ -185,7 +188,7 @@ async def fetch_page_content(url: str, max_chars: int = 1000) -> str | None:
         return text if len(text) > 100 else None
         
     except Exception as e:
-        print(f"[Search] Fetch error for {url[:50]}: {e}")
+        logger.warning(f"[Search] Fetch error for {url[:50]}: {e}")
         return None
 
 
@@ -271,7 +274,7 @@ Based on these search results, answer the user's question. Remember to cite sour
         return response
         
     except Exception as e:
-        print(f"[Search] AI summarization error: {e}")
+        logger.error(f"[Search] AI summarization error: {e}")
         # Fallback to simple results
         return await _format_simple_results(query, results)
 
