@@ -19,18 +19,15 @@ class STTProvider(ABC):
         pass
 
 
+from cachetools import TTLCache
+
 class CachedSTT(STTProvider):
-    """Wrapper that caches transcriptions in Redis."""
+    """Wrapper that caches transcriptions in memory."""
     
     def __init__(self, provider: STTProvider):
         self.provider = provider
-        self._redis = None
-    
-    def _get_redis(self):
-        if self._redis is None:
-            import redis.asyncio as redis_lib
-            self._redis = redis_lib.from_url(settings.REDIS_URL, decode_responses=True)
-        return self._redis
+        # Cache up to 1000 items for 24 hours
+        self._cache = TTLCache(maxsize=1000, ttl=86400)
     
     def _get_file_hash(self, file_path: str) -> str:
         """Get MD5 hash of file content for cache key."""
@@ -45,24 +42,15 @@ class CachedSTT(STTProvider):
             return ""
         
         file_hash = self._get_file_hash(file_path)
-        cache_key = f"stt_cache:{file_hash}"
         
-        redis = self._get_redis()
-        try:
-            cached = await redis.get(cache_key)
-            if cached:
-                logger.debug(f"STT cache hit for {file_hash[:8]}...")
-                return cached
-        except Exception as e:
-            logger.warning(f"Redis cache error: {e}")
+        if file_hash in self._cache:
+            logger.debug(f"STT cache hit for {file_hash[:8]}...")
+            return self._cache[file_hash]
         
         result = await self.provider.transcribe(file_path)
         
         if result:
-            try:
-                await redis.set(cache_key, result, ex=86400)  # 24 hours
-            except Exception as e:
-                logger.warning(f"Redis cache set error: {e}")
+            self._cache[file_hash] = result
         
         return result
 
