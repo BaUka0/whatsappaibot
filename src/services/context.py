@@ -167,4 +167,17 @@ class ContextService:
         self.ratelimit_cache[chat_id] = count + 1
         return True
 
+    # Group specific (Migration compatibility)
+    async def add_group_message(self, chat_id: str, sender_name: str, content: str):
+        """Add a group message to context."""
+        # We format it to include the sender's name so LLM knows who spoke
+        full_content = f"{sender_name}: {content}"
+        await self.add_message(chat_id, "user", full_content)
+
+    async def clear_group_messages(self, chat_id: str):
+        """Clear group messages."""
+        # In single-table architecture, this is redundant if clear_history is also called.
+        # But we implement it to satisfy the interface called by worker.py
+        pass
+
 context_service = ContextService()

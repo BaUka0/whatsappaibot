@@ -141,7 +141,10 @@ async def _process_message_async(event_data: dict):
 
     # Update history
     try:
-        await context_service.add_message(chat_id, "user", text_content)
+        # User message was already added for groups at line 106
+        if not is_group:
+            await context_service.add_message(chat_id, "user", text_content)
+        
         await context_service.add_message(chat_id, "assistant", response_text)
     except Exception as e:
         logger.error(f"Failed to save history for chat {chat_id}: {e}")
