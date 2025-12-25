@@ -18,9 +18,13 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str
 
     # LLM Settings
-    OPENROUTER_API_KEY: str
-    OPENROUTER_MODEL: str = "llama-3.3-70b-versatile"
-    OPENROUTER_BASE_URL: str = "https://api.groq.com/openai/v1"
+    LLM_API_KEY: str
+    LLM_MODEL: str = "gpt-3.5-turbo" # Default, user should override
+    LLM_BASE_URL: str = "https://api.openai.com/v1"
+    
+    # Text-to-Speech / STT (Groq)
+    GROQ_API_KEY: str
+    
     SYSTEM_PROMPT: str = """You are a helpful WhatsApp assistant. 
 IMPORTANT: Always respond in the SAME LANGUAGE the user writes to you.
 - If user writes in Russian, respond in Russian.

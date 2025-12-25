@@ -79,12 +79,12 @@ class GroqSTT(STTProvider):
     
     def __init__(self):
         self.client = AsyncOpenAI(
-            api_key=settings.OPENROUTER_API_KEY,
+            api_key=settings.GROQ_API_KEY,
             base_url="https://api.groq.com/openai/v1",
         )
 
     async def transcribe(self, file_path: str) -> str:
-        if not settings.OPENROUTER_API_KEY:
+        if not settings.GROQ_API_KEY:
             return "STT не настроен (нужен API ключ)."
         
         converted_path = _convert_to_mp3(file_path)

@@ -14,7 +14,14 @@ class SupabaseService:
         """Check Supabase connectivity."""
         try:
             # Try to list tables or perform a simple query
-            self.client.table("chat_messages").select("count", count="exact").limit(1).execute()
+            # Run in thread pool as client.table()...execute() is blocking
+            import asyncio
+            loop = asyncio.get_running_loop()
+            
+            def _check():
+                return self.client.table("chat_messages").select("count", count="exact").limit(1).execute()
+                
+            await loop.run_in_executor(None, _check)
             return {"healthy": True, "details": "Connected to Supabase"}
         except Exception as e:
             logger.error(f"Supabase health check failed: {e}")

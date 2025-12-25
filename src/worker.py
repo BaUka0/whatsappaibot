@@ -124,12 +124,9 @@ async def _process_message_async(event_data: dict):
     
     llm_messages.append({"role": "user", "content": current_content})
     
-    # Get chat-specific model or use default
-    chat_model = await context_service.get_model(chat_id)
-    
     # Get LLM response
     try:
-        response_text = await llm_service.get_response(llm_messages, model=chat_model)
+        response_text = await llm_service.get_response(llm_messages)
     except Exception as e:
         logger.error(f"LLM service error for chat {chat_id}: {e}")
         await green_api.send_message(chat_id, "❌ Ошибка при получении ответа от AI. Попробуйте позже.")
@@ -250,7 +247,7 @@ async def _handle_commands(text: str, chat_id: str, sender_id: str, is_group: bo
 📋 /summary - резюме чата
 🎙️ /transcribe - транскрибация
 📊 /stats - статистика
-🔧 /model - сменить AI модель
+
 🔍 /search - поиск с AI-ответом
 🎨 /draw - генерация картинок
 
@@ -269,49 +266,14 @@ async def _handle_commands(text: str, chat_id: str, sender_id: str, is_group: bo
     # /stats
     if cmd == "/stats":
         history = await context_service.get_history(chat_id)
-        # Get current model for this chat
-        current_model = await context_service.get_model(chat_id) or settings.OPENROUTER_MODEL
         stats = f"""📊 *Статистика:*
 
 💬 Сообщений в памяти: {len(history)}
-🔧 Модель: {current_model}
-🤖 Ник: {settings.BOT_NICKNAME}
-
-Смена модели: /model"""
+🤖 Ник: {settings.BOT_NICKNAME}"""
         await green_api.send_message(chat_id, stats)
         return True
     
-    # /model - view or change model
-    if cmd == "/model" or cmd.startswith("/model "):
-        # Fetch models dynamically from Groq API
-        available_models = await llm_service.get_available_models()
-        
-        parts = text.strip().split(maxsplit=1)
-        current_model = await context_service.get_model(chat_id) or settings.OPENROUTER_MODEL
-        
-        if len(parts) == 1:
-            # Show available models
-            lines = [f"🔧 *Доступные модели ({len(available_models)}):*\n"]
-            for model_id, desc in sorted(available_models.items()):
-                marker = "✅" if model_id == current_model else "•"
-                lines.append(f"{marker} `{model_id}`\n   {desc}")
-            lines.append(f"\n💡 Смена: /model <название>")
-            await green_api.send_message(chat_id, "\n".join(lines))
-        else:
-            # Set model
-            new_model = parts[1].strip()
-            if new_model in available_models:
-                await context_service.set_model(chat_id, new_model)
-                await green_api.send_message(
-                    chat_id, 
-                    f"✅ Модель изменена на:\n`{new_model}`\n{available_models[new_model]}"
-                )
-            else:
-                await green_api.send_message(
-                    chat_id, 
-                    f"❌ Модель `{new_model}` не найдена.\nНапиши /model для списка."
-                )
-        return True
+
     
     # /search - web search with AI summarization (Perplexity-style)
     if cmd.startswith("/search ") or cmd == "/search":
@@ -330,9 +292,7 @@ async def _handle_commands(text: str, chat_id: str, sender_id: str, is_group: bo
         await green_api.send_message(chat_id, f"🔍 Ищу: _{query}_\n⏳ Анализирую источники...")
         
         from src.services.search import search_and_summarize
-        # Use chat's selected model
-        chat_model = await context_service.get_model(chat_id)
-        result = await search_and_summarize(query, model=chat_model)
+        result = await search_and_summarize(query)
         await green_api.send_message(chat_id, result)
         return True
     
@@ -348,9 +308,8 @@ async def _handle_commands(text: str, chat_id: str, sender_id: str, is_group: bo
         
         from src.services.image_gen import generate_image
         
-        # Generate image with prompt enhancement, using chat's selected model
-        chat_model = await context_service.get_model(chat_id)
-        file_path, enhanced_prompt, seed = await generate_image(prompt, llm_model=chat_model)
+        # Generate image with prompt enhancement
+        file_path, enhanced_prompt, seed = await generate_image(prompt)
         
         if file_path and os.path.exists(file_path):
             # Create caption with original and enhanced prompt
@@ -476,11 +435,7 @@ async def _handle_summary_command(chat_id: str):
         # Truncate from the beginning (keep recent messages)
         messages_text = "...[обрезано]...\n" + messages_text[-MAX_CONTENT_CHARS:]
     
-    # Get chat-specific model
-    chat_model = await context_service.get_model(chat_id)
-    
-    prompt = f"{settings.SUMMARY_PROMPT}\n\n--- История ---\n{messages_text}"
-    summary = await llm_service.get_response([{"role": "user", "content": prompt}], model=chat_model)
+    summary = await llm_service.get_response([{"role": "user", "content": prompt}])
     
     note = f" (🎙️ {audio_count})" if audio_count else ""
     await green_api.send_message(chat_id, f"📋 *Резюме* ({len(formatted_messages)} сообщений{note}):\n\n{summary}")

@@ -1,6 +1,8 @@
 import json
 import time
 import logging
+import asyncio
+from typing import Any
 from cachetools import TTLCache
 from src.services.supabase_db import supabase_db
 
@@ -13,15 +15,25 @@ class ContextService:
         self.dedup_cache = TTLCache(maxsize=10000, ttl=600)  # 10 minutes
         self.ratelimit_cache = TTLCache(maxsize=10000, ttl=60)  # 1 minute
 
+    async def _run_async(self, func, *args, **kwargs) -> Any:
+        """Helper to run synchronous Supabase calls in a thread pool."""
+        loop = asyncio.get_running_loop()
+        # Use partial if kwargs are needed, though run_in_executor only takes *args
+        # Simple lambda wrapper handles both
+        return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
+
     async def get_history(self, chat_id: str, limit: int = 20) -> list[dict]:
         """Get chat history from Supabase."""
         try:
-            response = self.client.table("chat_messages") \
-                .select("role, content") \
-                .eq("chat_id", chat_id) \
-                .order("created_at", desc=True) \
-                .limit(limit) \
-                .execute()
+            def _fetch():
+                return self.client.table("chat_messages") \
+                    .select("role, content") \
+                    .eq("chat_id", chat_id) \
+                    .order("created_at", desc=True) \
+                    .limit(limit) \
+                    .execute()
+
+            response = await self._run_async(_fetch)
             
             # Reverse to get chronological order
             messages = response.data[::-1]
@@ -33,38 +45,50 @@ class ContextService:
     async def add_message(self, chat_id: str, role: str, content: str):
         """Add a message to Supabase."""
         try:
-            self.client.table("chat_messages").insert({
-                "chat_id": chat_id,
-                "role": role,
-                "content": content
-            }).execute()
+            def _insert():
+                self.client.table("chat_messages").insert({
+                    "chat_id": chat_id,
+                    "role": role,
+                    "content": content
+                }).execute()
+
+            await self._run_async(_insert)
         except Exception as e:
             logger.error(f"Failed to add message to Supabase: {e}")
 
     async def clear_history(self, chat_id: str):
         """Clear history for a chat."""
         try:
-            self.client.table("chat_messages").delete().eq("chat_id", chat_id).execute()
+            def _delete():
+                self.client.table("chat_messages").delete().eq("chat_id", chat_id).execute()
+
+            await self._run_async(_delete)
         except Exception as e:
             logger.error(f"Failed to clear history in Supabase: {e}")
 
     async def set_ai_enabled(self, chat_id: str, enabled: bool):
         """Enable/disable AI for a chat."""
         try:
-            self.client.table("chat_settings").upsert({
-                "chat_id": chat_id,
-                "ai_enabled": enabled
-            }).execute()
+            def _upsert():
+                self.client.table("chat_settings").upsert({
+                    "chat_id": chat_id,
+                    "ai_enabled": enabled
+                }).execute()
+
+            await self._run_async(_upsert)
         except Exception as e:
             logger.error(f"Failed to set AI status in Supabase: {e}")
 
     async def is_ai_enabled(self, chat_id: str) -> bool:
         """Check if AI is enabled."""
         try:
-            response = self.client.table("chat_settings") \
-                .select("ai_enabled") \
-                .eq("chat_id", chat_id) \
-                .execute()
+            def _select():
+                return self.client.table("chat_settings") \
+                    .select("ai_enabled") \
+                    .eq("chat_id", chat_id) \
+                    .execute()
+
+            response = await self._run_async(_select)
             if response.data:
                 return response.data[0].get("ai_enabled", False)
             return False
@@ -74,19 +98,25 @@ class ContextService:
 
     async def set_transcribe_mode(self, chat_id: str, enabled: bool):
         try:
-            self.client.table("chat_settings").upsert({
-                "chat_id": chat_id,
-                "transcribe_mode": enabled
-            }).execute()
+            def _upsert():
+                self.client.table("chat_settings").upsert({
+                    "chat_id": chat_id,
+                    "transcribe_mode": enabled
+                }).execute()
+
+            await self._run_async(_upsert)
         except Exception as e:
             logger.error(f"Failed to set transcribe mode in Supabase: {e}")
 
     async def get_transcribe_mode(self, chat_id: str) -> bool:
         try:
-            response = self.client.table("chat_settings") \
-                .select("transcribe_mode") \
-                .eq("chat_id", chat_id) \
-                .execute()
+            def _select():
+                return self.client.table("chat_settings") \
+                    .select("transcribe_mode") \
+                    .eq("chat_id", chat_id) \
+                    .execute()
+
+            response = await self._run_async(_select)
             if response.data:
                 return response.data[0].get("transcribe_mode", False)
             return False
@@ -94,35 +124,18 @@ class ContextService:
             logger.error(f"Failed to get transcribe mode in Supabase: {e}")
             return False
 
-    async def set_model(self, chat_id: str, model: str):
-        try:
-            self.client.table("chat_settings").upsert({
-                "chat_id": chat_id,
-                "preferred_model": model
-            }).execute()
-        except Exception as e:
-            logger.error(f"Failed to set model in Supabase: {e}")
 
-    async def get_model(self, chat_id: str) -> str | None:
-        try:
-            response = self.client.table("chat_settings") \
-                .select("preferred_model") \
-                .eq("chat_id", chat_id) \
-                .execute()
-            if response.data:
-                return response.data[0].get("preferred_model")
-            return None
-        except Exception as e:
-            logger.error(f"Failed to get model from Supabase: {e}")
-            return None
 
     # Blacklist (Using a dedicated table)
     async def is_blacklisted(self, user_id: str) -> bool:
         try:
-            response = self.client.table("blacklist") \
-                .select("user_id") \
-                .eq("user_id", user_id) \
-                .execute()
+            def _select():
+                return self.client.table("blacklist") \
+                    .select("user_id") \
+                    .eq("user_id", user_id) \
+                    .execute()
+
+            response = await self._run_async(_select)
             return len(response.data) > 0
         except Exception as e:
             logger.error(f"Failed to check blacklist in Supabase: {e}")
@@ -130,16 +143,22 @@ class ContextService:
 
     async def add_to_blacklist(self, user_id: str, reason: str = "blocked"):
         try:
-            self.client.table("blacklist").upsert({
-                "user_id": user_id,
-                "reason": reason
-            }).execute()
+            def _upsert():
+                self.client.table("blacklist").upsert({
+                    "user_id": user_id,
+                    "reason": reason
+                }).execute()
+
+            await self._run_async(_upsert)
         except Exception as e:
             logger.error(f"Failed to add to blacklist in Supabase: {e}")
 
     async def remove_from_blacklist(self, user_id: str) -> bool:
         try:
-            self.client.table("blacklist").delete().eq("user_id", user_id).execute()
+            def _delete():
+                self.client.table("blacklist").delete().eq("user_id", user_id).execute()
+
+            await self._run_async(_delete)
             return True
         except Exception as e:
             logger.error(f"Failed to remove from blacklist in Supabase: {e}")
@@ -147,7 +166,10 @@ class ContextService:
 
     async def get_blacklist(self) -> dict[str, str]:
         try:
-            response = self.client.table("blacklist").select("*").execute()
+            def _select():
+                return self.client.table("blacklist").select("*").execute()
+
+            response = await self._run_async(_select)
             return {item["user_id"]: item["reason"] for item in response.data}
         except Exception as e:
             logger.error(f"Failed to get blacklist from Supabase: {e}")

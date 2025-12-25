@@ -313,7 +313,7 @@ async def quick_search(query: str) -> str:
         summary = await llm_service.get_response([
             {"role": "system", "content": SEARCH_SYSTEM_PROMPT},
             {"role": "user", "content": ai_prompt}
-        ], model="llama-3.3-70b-versatile")
+        ])
         
         return f"🔍 _{query}_\n\n{summary}"
     except:

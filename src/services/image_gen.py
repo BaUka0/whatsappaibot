@@ -49,12 +49,12 @@ async def enhance_prompt(user_prompt: str, model: str | None = None) -> str:
         from openai import AsyncOpenAI
         
         client = AsyncOpenAI(
-            api_key=settings.OPENROUTER_API_KEY,
-            base_url=settings.OPENROUTER_BASE_URL,
+            api_key=settings.LLM_API_KEY,
+            base_url=settings.LLM_BASE_URL,
         )
         
         # Use provided model or default
-        use_model = model or settings.OPENROUTER_MODEL
+        use_model = model or settings.LLM_MODEL
         
         response = await client.chat.completions.create(
             model=use_model,
