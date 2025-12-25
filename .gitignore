@@ -71,3 +71,13 @@ src/services/__pycache__/green_api.cpython-311.pyc
 src/services/__pycache__/image_gen.cpython-314.pyc
 src/services/__pycache__/llm.cpython-311.pyc
 src/services/__pycache__/stt.cpython-311.pyc
+src/__pycache__/config.cpython-311.pyc
+src/__pycache__/config.cpython-314.pyc
+src/__pycache__/main.cpython-311.pyc
+src/__pycache__/worker.cpython-311.pyc
+src/__pycache__/config.cpython-311.pyc
+src/__pycache__/config.cpython-314.pyc
+src/__pycache__/main.cpython-311.pyc
+src/__pycache__/worker.cpython-311.pyc
+src/services/__pycache__/context.cpython-311.pyc
+src/services/__pycache__/green_api.cpython-311.pyc

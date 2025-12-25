@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+docker-compose.yml
+Dockerfile
+
+# Environment
+.env
+.venv
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Tests and Coverage
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+pytest.ini
+
+# App Data
+media/
+*.log
+
+# IDE
+.idea/
+.vscode/
